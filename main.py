@@ -50,8 +50,8 @@ LAUNCH_JUMP = 3868.0 / 638.0
 LAUNCH_HOURS = 12.0
 SIGMA_COMMON_DEFAULT = 0.22
 SIGMA_COMMON_MIN, SIGMA_COMMON_MAX = 0.05, 0.9
-SIGMA_SHARE = 0.04
-SIGMA_MIN, SIGMA_MAX = 0.02, 1.5
+SIGMA_SHARE = 0.005
+SIGMA_MIN, SIGMA_MAX = 0.012, 1.5
 # Exponent clamps: the tracked count and the mean trophies per player both grow, and a
 # power law steeper than time itself is a fit to one jump, not to a trend.
 B_N = (0.05, 1.1)
@@ -232,14 +232,12 @@ def forecast_rates(points: list, t_star: float, count: int) -> tuple[list, list,
                 rates.append(None)
                 earners.append(1.0)
                 continue
-            if r >= 99.5:
-                rates.append(99.99)
-                earners.append(n_pred)
-                continue
-            val = min(99.5, r * last["n"] / n_pred)
+            # Every trophy keeps its earners: a rate scales by old_players / new_players,
+            # including the one at 100%, whose earners are every player tracked before.
+            val = min(99.99, r * last["n"] / n_pred)
             rates.append(val)
-            earners.append(val / 100.0 * n_pred)
-        return rates, earners, 0.05
+            earners.append(max(val, 1e-6) / 100.0 * n_pred)
+        return rates, earners, 0.02
 
     n_pred = predict([(p["t"], p["n"]) for p in points], t_star, *B_N)
     m_pred = predict([(p["t"], p["tot"] / p["n"]) for p in points], t_star, *B_M)
@@ -331,9 +329,9 @@ def forecast_case(case: dict, name: str) -> dict:
             val = points[-1]["rates"][i] if i < len(points[-1]["rates"]) else 1.0
         if not isinstance(val, (int, float)) or val <= 0.0:
             val = 1.0
-        sigma = math.sqrt(sigma_common ** 2 + 0.35 / max(earners[i], 2.0) + SIGMA_SHARE ** 2)
+        sigma = math.sqrt(sigma_common ** 2 + 0.0004 / max(earners[i], 2.0) + SIGMA_SHARE ** 2)
         if val >= 99.0:
-            sigma = min(sigma, 0.05)
+            sigma = min(sigma, 0.02)
         sigma = min(SIGMA_MAX, max(SIGMA_MIN, sigma))
         base = logit(val)
         qs = [round4(100.0 * expit(base + z * sigma)) for z in Z]
